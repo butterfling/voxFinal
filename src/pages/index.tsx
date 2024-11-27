@@ -47,8 +47,8 @@ function ConnectionTab() {
   return (
     <>
       <Head>
-        <title>AudioWiz</title>
-        <meta name="description" content="AudioWiz" />
+        <title>VoxBridge</title>
+        <meta name="description" content="VoxBridge" />
         <link rel="icon" href="/favicon.ico" />
       </Head>
       <Navbar status={status} session={session} />
@@ -88,7 +88,7 @@ function ConnectionTab() {
                 <Image src="/logo.png" alt="Logo" width={100} height={100} />
               </div>
               <a className="gradient-text md:text5xl text-4xl font-bold lg:text-7xl">
-                AudioWiz
+                VoxBridge
               </a>
             </div>
             <div>

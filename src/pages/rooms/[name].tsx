@@ -46,8 +46,8 @@ const Home: NextPage = () => {
   return (
     <>
       <Head>
-        <title>AudioWiz</title>
-        <meta name="description" content="AudioWiz" />
+        <title>VoxBridge</title>
+        <meta name="description" content="VoxBridge" />
         <link rel="icon" href="/favicon.ico" />
       </Head>
 

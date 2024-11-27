@@ -13,7 +13,7 @@ const FullScreenLoader = () => {
         priority
       />
       <div className="flex flex-col items-center justify-center">
-        <h1 className="gradient-text text-4xl font-bold">AudioWiz</h1>
+        <h1 className="gradient-text text-4xl font-bold">VoxBridge</h1>
         <div className="text-center text-gray-300">
           Loading your experience...
           <Loader />

@@ -1,12 +1,39 @@
-import axios from "axios";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
-
-import { Configuration, OpenAIApi } from "openai";
 import { z } from "zod";
-const configuration = new Configuration({
-  apiKey: process.env.OPEN_API_SECRET,
+import AWS from 'aws-sdk';
+import { env } from "@/env.mjs";
+import { Prisma, Room } from "@prisma/client";
+
+// Configure AWS S3
+const s3 = new AWS.S3({
+  accessKeyId: env.AWS_ACCESS_KEY_ID,
+  secretAccessKey: env.AWS_SECRET_ACCESS_KEY,
+  region: env.AWS_REGION.replace(/['"]/g, ''),
+  endpoint: 'https://s3.eu-north-1.amazonaws.com',
+  signatureVersion: 'v4'
 });
-const openai = new OpenAIApi(configuration);
+
+const generateBucketName = (roomName: string): string => {
+  const sanitizedName = roomName.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+  return `voxbridge-meeting-${sanitizedName}`;
+};
+
+const uploadToS3 = async (bucketName: string, summary: string, roomName: string) => {
+  const key = `summary-${Date.now()}.txt`;
+  await s3.putObject({
+    Bucket: bucketName,
+    Key: key,
+    Body: summary,
+    ContentType: 'text/plain',
+  }).promise();
+
+  return s3.getSignedUrl('getObject', {
+    Bucket: bucketName,
+    Key: key,
+    Expires: 604800 // URL expires in 7 days
+  });
+};
+
 export const summaryRouter = createTRPCRouter({
   getRoomSummary: protectedProcedure
     .input(
@@ -15,6 +42,7 @@ export const summaryRouter = createTRPCRouter({
       })
     )
     .query(async ({ input, ctx }) => {
+      // Get transcripts from the database
       const transcripts = await ctx.prisma.transcript.findMany({
         where: {
           Room: {
@@ -28,59 +56,70 @@ export const summaryRouter = createTRPCRouter({
           createdAt: "asc",
         },
       });
-      const chatLog = transcripts.map((transcript) => ({
-        speaker: transcript.User?.name,
-        utterance: transcript.transcription,
-        timestamp: transcript.createdAt.toISOString(),
-      }));
-      console.log(chatLog);
-      if (chatLog.length === 0) {
-        return null;
+
+      if (transcripts.length === 0) {
+        throw new Error("No transcripts found for this room");
       }
 
-      const apiKey = process.env.ONEAI_API_KEY;
-      console.log(chatLog);
-      try {
-        const config = {
-          method: "POST",
-          url: "https://api.oneai.com/api/v0/pipeline",
-          headers: {
-            "api-key": apiKey,
-            "Content-Type": "application/json",
-          },
-          data: {
-            input: chatLog,
-            input_type: "conversation",
-            content_type: "application/json",
-            output_type: "json",
-            multilingual: {
-              enabled: true,
-            },
-            steps: [
-              {
-                skill: "article-topics",
-              },
-              {
-                skill: "numbers",
-              },
-              {
-                skill: "names",
-              },
-              {
-                skill: "emotions",
-              },
-              {
-                skill: "summarize",
-              },
-            ],
-          },
-        };
+      // Format transcripts for BERT summarization
+      const conversationText = transcripts
+        .map((t) => `${t.User?.name || 'Unknown User'}: ${t.transcription}`)
+        .join("\n");
 
-        const res = await axios.request(config);
-        console.log(res.status);
-        return res.data;
+      // Generate summary using BERT API endpoint
+      const response = await fetch(`${env.NEXTAUTH_URL}/api/generate-summary`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          transcripts: conversationText,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to generate summary');
+      }
+
+      const { summary } = await response.json();
+
+      // Upload to S3
+      const bucketName = generateBucketName(input.roomName);
+      try {
+        // Ensure bucket exists
+        try {
+          await s3.headBucket({ Bucket: bucketName }).promise();
+        } catch (error: any) {
+          if (error.code === 'NotFound' || error.code === 'NoSuchBucket') {
+            await s3.createBucket({
+              Bucket: bucketName,
+              CreateBucketConfiguration: {
+                LocationConstraint: env.AWS_REGION.replace(/['"]/g, '')
+              }
+            }).promise();
+          }
+        }
+
+        const s3Url = await uploadToS3(bucketName, summary, input.roomName);
+
+        // Store the summary URL in the database
+        const updateData = {
+          summaryUrl: s3Url,
+          summary: summary
+        } as Prisma.RoomUpdateInput;
+
+        await ctx.prisma.room.update({
+          where: { name: input.roomName },
+          data: updateData,
+        });
+
+        return {
+          summary,
+          summaryUrl: s3Url,
+        };
       } catch (error) {
-        console.log(error);
+        console.error('Error uploading to S3:', error);
+        throw new Error('Failed to store summary in S3');
       }
     }),
 });

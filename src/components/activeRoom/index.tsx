@@ -8,6 +8,7 @@ import {
   formatChatMessageLinks,
 } from "@livekit/components-react";
 import { setCORS } from "google-translate-api-browser";
+import { generateMeetingSummary, uploadToS3 } from "@/utils/meetingSummary";
 
 const translate = setCORS("https://cors-proxy.fringe.zone/");
 
@@ -95,6 +96,10 @@ const ActiveRoom = ({
 
   const pusherMutation = api.pusher.sendTranscript.useMutation();
   const [myTranscripts, setMyTranscripts] = useState<string[]>([]);
+  const [allTranscripts, setAllTranscripts] = useState<string[]>([]);
+  const [summaryUrl, setSummaryUrl] = useState<string | null>(null);
+  const [showSummary, setShowSummary] = useState(false);
+
   useEffect(() => {
     console.log("Running transcription");
     navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
@@ -136,6 +141,7 @@ const ActiveRoom = ({
             isFinal: true,
           });
           setMyTranscripts((prev) => [...prev, transcript]);
+          setAllTranscripts((prev) => [...prev, transcript]);
           if (
             !(
               transcript.toLowerCase() === "is" ||
@@ -194,6 +200,7 @@ const ActiveRoom = ({
       clearTimeout(timer);
     };
   }, [transcriptionQueue]);
+
   useEffect(() => {
     const pusher = new Pusher(process.env.NEXT_PUBLIC_PUSHER_KEY as string, {
       cluster: process.env.NEXT_PUBLIC_PUSHER_CLUSTER as string,
@@ -207,10 +214,16 @@ const ActiveRoom = ({
         senderId: string;
         isFinal: boolean;
       }) {
-        if (data.isFinal && userId !== data.senderId) {
-          setTranscriptionQueue((prev) => {
-            return [...prev, data];
-          });
+        if (data.isFinal) {
+          if (data.message.includes("Meeting summary is ready! Access it here:")) {
+            const url = data.message.split("here: ")[1];
+            setSummaryUrl(url ?? null);  
+            setShowSummary(true);
+          } else if (userId !== data.senderId) {
+            setTranscriptionQueue((prev) => {
+              return [...prev, data];
+            });
+          }
         }
       }
     );
@@ -219,6 +232,31 @@ const ActiveRoom = ({
       pusher.unsubscribe(roomName);
     };
   }, []);
+
+  const handleDisconnect = async () => {
+    try {
+      // Generate summary
+      const summary = await generateMeetingSummary(allTranscripts);
+      
+      // Upload to S3
+      const s3Url = await uploadToS3(summary, roomName);
+      setSummaryUrl(s3Url);
+      setShowSummary(true);
+      
+      // Send notification with the S3 URL
+      await pusherMutation.mutate({
+        message: `Meeting summary is ready! Access it here: ${s3Url}`,
+        roomName: roomName,
+        isFinal: true,
+      });
+      
+      // Call original onLeave if it exists
+      onLeave?.();
+    } catch (error) {
+      console.error('Error handling meeting end:', error);
+      onLeave?.();
+    }
+  };
 
   if (isLoading) return <FullScreenLoader />;
   if (error) router.push("/");
@@ -230,6 +268,25 @@ const ActiveRoom = ({
           {error.message}
         </div>
       )}
+      {showSummary && summaryUrl && (
+        <div className="fixed bottom-4 right-4 z-50 rounded-lg bg-green-500 p-4 text-white shadow-lg">
+          <p className="mb-2">Meeting summary is ready!</p>
+          <a 
+            href={summaryUrl} 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="inline-block rounded bg-white px-4 py-2 text-green-500 hover:bg-green-50"
+          >
+            View Summary
+          </a>
+          <button 
+            onClick={() => setShowSummary(false)} 
+            className="ml-2 text-white hover:text-green-100"
+          >
+            ✕
+          </button>
+        </div>
+      )}
       {!error && data && (
         <LiveKitRoom
           token={data.accessToken}
@@ -237,7 +294,7 @@ const ActiveRoom = ({
           options={roomOptions}
           video={userChoices.videoEnabled}
           audio={userChoices.audioEnabled}
-          onDisconnected={onLeave}
+          onDisconnected={handleDisconnect}
           onError={(err) => {
             console.error('LiveKit room error:', err);
             // Optionally show error to user or handle reconnection
@@ -245,6 +302,20 @@ const ActiveRoom = ({
           connect={true}
         >
           <div className="relative h-full w-full">
+            {showSummary && summaryUrl && (
+              <div className="absolute top-4 right-4 z-50 bg-white bg-opacity-90 p-4 rounded-lg shadow-lg">
+                <p className="text-black mb-2">Meeting summary is ready!</p>
+                <a href={summaryUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 underline">
+                  View Summary
+                </a>
+                <button 
+                  onClick={() => setShowSummary(false)}
+                  className="ml-4 text-gray-600 hover:text-gray-800"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
             <div className="closed-captions-wrapper z-50">
               <div className="closed-captions-container">
                 {caption?.message ? (

@@ -48,8 +48,8 @@ function profile() {
   return (
     <>
       <Head>
-        <title>AudioWiz | Profile</title>
-        <meta name="description" content="AudioWiz" />
+        <title>VoxBridge | Profile</title>
+        <meta name="description" content="VoxBridge" />
         <link rel="icon" href="/favicon.ico" />
       </Head>
       <Navbar status={status} session={session} />

@@ -29,7 +29,7 @@ const Footer = () => {
           />
         </div>
         <p className="mx-auto mt-6 max-w-md text-center leading-relaxed text-white">
-          <a className="flex justify-center">AudioWiz</a>
+          <a className="flex justify-center">VoxBridge</a>
 
           <a className="flex justify-center text-xs text-gray-300">
             Multilingual Video Conferencing App

@@ -71,6 +71,7 @@ model Room {
   OwnerId     String
   Owner       User          @relation(fields: [OwnerId], references: [id], onDelete: Cascade)
   summary     String?       @db.Text
+  summaryUrl  String?       @db.Text
   Transcript  Transcript[]
   Participant Participant[]
 

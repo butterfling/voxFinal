@@ -1,4 +1,4 @@
-# AudioWiz
+# VoxBridge
 
 ### Multilingual Live Video conferencing
 

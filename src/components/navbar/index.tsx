@@ -43,7 +43,7 @@ const Navbar = ({
           <Link href="/" className="flex items-center space-x-2">
             <Image src="/logo.png" alt="Logo" width={40} height={40} priority />
 
-            <h1 className="text-xl font-bold text-white">AudioWiz</h1>
+            <h1 className="text-xl font-bold text-white">VoxBridge</h1>
           </Link>
 
           <div className="hidden space-x-6 text-white lg:flex lg:items-center">
