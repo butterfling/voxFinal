@@ -10,16 +10,18 @@ const config = {
   images: {
     domains: ["lh3.googleusercontent.com"],
   },
-
-  /**
-   * If you have the "experimental: { appDir: true }" setting enabled, then you
-   * must comment the below `i18n` config out.
-   *
-   * @see https://github.com/vercel/next.js/issues/41980
-   */
   i18n: {
     locales: ["en"],
     defaultLocale: "en",
   },
+  // Force IPv4
+  server: {
+    host: '127.0.0.1',
+    port: 3000
+  },
+  env: {
+    NEXT_PUBLIC_API_URL: 'http://127.0.0.1:3000',
+  },
 };
+
 export default config;

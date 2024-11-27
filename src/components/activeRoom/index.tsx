@@ -45,25 +45,35 @@ const ActiveRoom = ({
 
   const { region, hq } = router.query;
 
-  //   const liveKitUrl = useServerUrl(region as string | undefined);
-
   const roomOptions = useMemo((): RoomOptions => {
     return {
       videoCaptureDefaults: {
         deviceId: userChoices.videoDeviceId ?? undefined,
-        resolution: hq === "true" ? VideoPresets.h2160 : VideoPresets.h720,
+        resolution: hq === "true" ? VideoPresets.h1080 : VideoPresets.h720,
+        facingMode: 'user',
       },
       publishDefaults: {
         videoSimulcastLayers:
           hq === "true"
-            ? [VideoPresets.h1080, VideoPresets.h720]
-            : [VideoPresets.h540, VideoPresets.h216],
+            ? [VideoPresets.h720, VideoPresets.h540]
+            : [VideoPresets.h540, VideoPresets.h360],
+        videoCodec: 'vp8',
+        dtx: true,
+        red: true,
+        forceStereo: false,
       },
       audioCaptureDefaults: {
         deviceId: userChoices.audioDeviceId ?? undefined,
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
       },
-      adaptiveStream: { pixelDensity: "screen" },
+      adaptiveStream: {
+        pixelDensity: "screen",
+        pauseVideoInBackground: true,
+      },
       dynacast: true,
+      disconnectOnPageLeave: true,
     };
   }, [userChoices, hq]);
 
@@ -84,7 +94,7 @@ const ActiveRoom = ({
   });
 
   const pusherMutation = api.pusher.sendTranscript.useMutation();
-  const [ myTranscripts , setMyTranscripts ] = useState<string[]>([])
+  const [myTranscripts, setMyTranscripts] = useState<string[]>([]);
   useEffect(() => {
     console.log("Running transcription");
     navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
@@ -119,20 +129,25 @@ const ActiveRoom = ({
         const transcript = received.channel?.alternatives[0].transcript;
 
         if (transcript !== "" && transcript !== undefined) {
-          if(myTranscripts.includes(transcript)) return
+          if (myTranscripts.includes(transcript)) return;
           await pusherMutation.mutate({
             message: transcript,
             roomName: roomName,
             isFinal: true,
           });
-          setMyTranscripts((prev) => [...prev, transcript])
+          setMyTranscripts((prev) => [...prev, transcript]);
           if (
             !(
               transcript.toLowerCase() === "is" ||
               transcription.toLowerCase() === "so"
             )
-          )
+          ) {
             setTranscription(transcript);
+            setCaption({
+              sender: "You",
+              message: transcript,
+            });
+          }
         }
       };
 
@@ -218,27 +233,34 @@ const ActiveRoom = ({
       {!error && data && (
         <LiveKitRoom
           token={data.accessToken}
-          serverUrl={process.env.NEXT_PUBLIC_LIVEKIT_API_HOST}
+          serverUrl={`wss://${process.env.NEXT_PUBLIC_LIVEKIT_API_HOST}`}
           options={roomOptions}
           video={userChoices.videoEnabled}
           audio={userChoices.audioEnabled}
           onDisconnected={onLeave}
+          onError={(err) => {
+            console.error('LiveKit room error:', err);
+            // Optionally show error to user or handle reconnection
+          }}
+          connect={true}
         >
-          <div className="closed-captions-wrapper z-50">
-            <div className="closed-captions-container">
-              {caption?.message ? (
-                <>
-                  <div className="closed-captions-username">
-                    {caption.sender}
-                  </div>
-                  <span>:&nbsp;</span>
-                </>
-              ) : null}
-              <div className="closed-captions-text">{caption.message}</div>
+          <div className="relative h-full w-full">
+            <div className="closed-captions-wrapper z-50">
+              <div className="closed-captions-container">
+                {caption?.message ? (
+                  <>
+                    <div className="closed-captions-username">
+                      {caption.sender}
+                    </div>
+                    <span>:&nbsp;</span>
+                  </>
+                ) : null}
+                <div className="closed-captions-text">{caption.message}</div>
+              </div>
             </div>
+            <VideoConference chatMessageFormatter={formatChatMessageLinks} />
+            <DebugMode logLevel={LogLevel.info} />
           </div>
-          <VideoConference chatMessageFormatter={formatChatMessageLinks} />
-          <DebugMode logLevel={LogLevel.info} />
         </LiveKitRoom>
       )}
     </>

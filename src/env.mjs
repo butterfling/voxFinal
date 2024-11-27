@@ -21,6 +21,9 @@ const server = z.object({
   // Add `.min(1) on ID and SECRET if you want to make sure they're not empty
   GOOGLE_CLIENT_ID: z.string(),
   GOOGLE_CLIENT_SECRET: z.string(),
+  LIVEKIT_API_KEY: z.string().min(1),
+  LIVEKIT_API_SECRET: z.string().min(1),
+  LIVEKIT_WS_URL: z.string().min(1),
 });
 
 /**
@@ -28,7 +31,7 @@ const server = z.object({
  * built with invalid env vars. To expose them to the client, prefix them with `NEXT_PUBLIC_`.
  */
 const client = z.object({
-  // NEXT_PUBLIC_CLIENTVAR: z.string().min(1),
+  NEXT_PUBLIC_LIVEKIT_API_HOST: z.string().min(1),
 });
 
 /**
@@ -44,7 +47,10 @@ const processEnv = {
   NEXTAUTH_URL: process.env.NEXTAUTH_URL,
   GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
   GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
-  // NEXT_PUBLIC_CLIENTVAR: process.env.NEXT_PUBLIC_CLIENTVAR,
+  LIVEKIT_API_KEY: process.env.LIVEKIT_API_KEY,
+  LIVEKIT_API_SECRET: process.env.LIVEKIT_API_SECRET,
+  LIVEKIT_WS_URL: process.env.LIVEKIT_WS_URL,
+  NEXT_PUBLIC_LIVEKIT_API_HOST: process.env.NEXT_PUBLIC_LIVEKIT_API_HOST,
 };
 
 // Don't touch the part below

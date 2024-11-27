@@ -21,12 +21,24 @@ function ConnectionTab() {
 
   const [roomLoading, setRoomLoading] = React.useState(false);
   const createRoomHandler = async () => {
-    if (status === "unauthenticated") signIn("google");
-    else {
+    if (status !== "authenticated") {
+      await signIn("google");
+      return;
+    }
+
+    try {
       setRoomLoading(true);
-      const data = await createRoom.mutateAsync();
+      const result = await createRoom.mutateAsync();
+      if (result?.roomName) {
+        await router.push(`/rooms/${result.roomName}`);
+      } else {
+        console.error("No room name returned from creation");
+      }
+    } catch (error) {
+      console.error("Failed to create room:", error);
+      // You might want to show a toast or error message to the user here
+    } finally {
       setRoomLoading(false);
-      router.push(`/rooms/${data.roomName}`);
     }
   };
 
