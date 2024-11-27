@@ -65,11 +65,11 @@ const Modal: FunctionComponent<ModalProps> = ({
                     <Loader />
                   ) : data ? (
                     <div className="text-sm text-gray-100 text-opacity-50">
-                      {data.output[0].contents.length > 1 && (
+                      {data.summary && (
                         <Tabs
                           selectedCode={selectedCode}
-                          summary={data.output[1].contents[0]?.utterance}
-                          transcriptions={data.input}
+                          summary={data.summary}
+                          transcriptions={[]}
                         />
                       )}
                     </div>
