@@ -24,6 +24,11 @@ const server = z.object({
   LIVEKIT_API_KEY: z.string().min(1),
   LIVEKIT_API_SECRET: z.string().min(1),
   LIVEKIT_WS_URL: z.string().min(1),
+  // Add Pusher server-side variables
+  PUSHER_APP_ID: z.string(),
+  PUSHER_KEY: z.string(),
+  PUSHER_SECRET: z.string(),
+  PUSHER_CLUSTER: z.string(),
 });
 
 /**
@@ -32,6 +37,10 @@ const server = z.object({
  */
 const client = z.object({
   NEXT_PUBLIC_LIVEKIT_API_HOST: z.string().min(1),
+  // Add Pusher client-side variables
+  NEXT_PUBLIC_PUSHER_KEY: z.string(),
+  NEXT_PUBLIC_PUSHER_CLUSTER: z.string(),
+  NEXT_PUBLIC_DEEPGRAM_API_KEY: z.string(),
 });
 
 /**
@@ -51,6 +60,14 @@ const processEnv = {
   LIVEKIT_API_SECRET: process.env.LIVEKIT_API_SECRET,
   LIVEKIT_WS_URL: process.env.LIVEKIT_WS_URL,
   NEXT_PUBLIC_LIVEKIT_API_HOST: process.env.NEXT_PUBLIC_LIVEKIT_API_HOST,
+  // Add Pusher variables
+  PUSHER_APP_ID: process.env.PUSHER_APP_ID,
+  PUSHER_KEY: process.env.PUSHER_KEY,
+  PUSHER_SECRET: process.env.PUSHER_SECRET,
+  PUSHER_CLUSTER: process.env.PUSHER_CLUSTER,
+  NEXT_PUBLIC_PUSHER_KEY: process.env.NEXT_PUBLIC_PUSHER_KEY,
+  NEXT_PUBLIC_PUSHER_CLUSTER: process.env.NEXT_PUBLIC_PUSHER_CLUSTER,
+  NEXT_PUBLIC_DEEPGRAM_API_KEY: process.env.NEXT_PUBLIC_DEEPGRAM_API_KEY,
 };
 
 // Don't touch the part below
