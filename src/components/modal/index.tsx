@@ -19,7 +19,7 @@ const Modal: FunctionComponent<ModalProps> = ({
   selectedCode,
 }) => {
   const { data, error, isLoading } = api.summary.getRoomSummary.useQuery({
-    roomName: `${roomName}/summary`,
+    roomName,
   });
   console.log(data);
 
@@ -53,32 +53,34 @@ const Modal: FunctionComponent<ModalProps> = ({
               leaveFrom="opacity-100 scale-100"
               leaveTo="opacity-0 scale-95"
             >
-              <Dialog.Panel className="w-full max-w-md transform overflow-hidden rounded-2xl bg-white bg-opacity-10 p-6 text-left align-middle shadow-xl backdrop-blur-2xl backdrop-filter transition-all">
+              <Dialog.Panel className="w-full max-w-md transform overflow-hidden rounded-2xl bg-black p-6 text-left align-middle shadow-xl transition-all">
                 <Dialog.Title
                   as="h3"
                   className="text-lg font-medium leading-6 text-white"
                 >
-                  Meeting Details
+                  Meeting Summary
                 </Dialog.Title>
-                <div className="">
-                  {isLoading ? (
+                {isLoading ? (
+                  <div className="mt-2">
                     <Loader />
-                  ) : data ? (
-                    <div className="text-sm text-gray-100 text-opacity-50">
-                      {data.summary && (
-                        <Tabs
-                          selectedCode={selectedCode}
-                          summary={data.summary}
-                          transcriptions={[]}
-                        />
-                      )}
-                    </div>
-                  ) : (
-                    <div className="text-sm text-gray-100 text-opacity-50">
-                      No summary available
-                    </div>
-                  )}
-                </div>
+                  </div>
+                ) : error ? (
+                  <div className="mt-2 text-red-500">
+                    Error loading summary
+                  </div>
+                ) : data?.summary ? (
+                  <div className="text-sm text-gray-100 text-opacity-50">
+                    <Tabs
+                      selectedCode={selectedCode}
+                      summary={data.summary}
+                      transcriptions={data.transcriptions || []}
+                    />
+                  </div>
+                ) : (
+                  <div className="mt-2 text-gray-400">
+                    No summary available
+                  </div>
+                )}
               </Dialog.Panel>
             </Transition.Child>
           </div>

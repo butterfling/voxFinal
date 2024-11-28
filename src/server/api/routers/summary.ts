@@ -138,13 +138,33 @@ export const summaryRouter = createTRPCRouter({
               Expires: 604800 // URL expires in 7 days
             });
 
-            return { url };
+            // Get the summary content from S3
+            const summaryObject = await s3.getObject({
+              Bucket: bucketName,
+              Key: latestObject.Key
+            }).promise();
+
+            const summaryText = summaryObject.Body?.toString('utf-8') || '';
+
+            return { 
+              url,
+              summary: summaryText,
+              transcriptions: [] // Add an empty transcriptions array to match the Tabs component type
+            };
           }
         }
-        return { url: null };
+        return { 
+          url: null,
+          summary: null,
+          transcriptions: []
+        };
       } catch (error) {
         console.error('Error getting room summary:', error);
-        return { url: null };
+        return { 
+          url: null,
+          summary: null,
+          transcriptions: []
+        };
       }
     }),
     
