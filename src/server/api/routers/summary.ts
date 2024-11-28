@@ -99,36 +99,53 @@ export const summaryRouter = createTRPCRouter({
               }
             }).promise();
             console.log('[DEBUG] Bucket created successfully:', bucketName);
-          } else {
-            throw error;
           }
-        } else {
-          console.log('[DEBUG] Unknown error type:', error);
         }
       }
 
-      const url = await uploadToS3(bucketName, summary[0]?.summary_text ?? '', input.roomName);
-      console.log('[DEBUG] Successfully uploaded summary. URL:', url);
-
-      if (!url) {
-        throw new Error('Failed to generate S3 URL');
-      }
-
-      // Create transcript record
-      const transcript = await ctx.prisma.transcript.create({
-        data: {
-          roomName: input.roomName,
-          transcription: input.transcription,
-          userId: ctx.session.user.id,
-        },
-      });
+      const summaryUrl = await uploadToS3(bucketName, summary[0]?.summary_text || '', input.roomName);
+      console.log('[DEBUG] Summary uploaded to S3, URL:', summaryUrl);
 
       return {
-        success: true,
-        summary: summary[0]?.summary_text ?? '',
-        url,
-        transcriptId: transcript.id,
+        summary: summary[0]?.summary_text || '',
+        url: summaryUrl
       };
+    }),
+
+  getRoomSummary: protectedProcedure
+    .input(z.object({
+      roomName: z.string(),
+    }))
+    .query(async ({ input }) => {
+      const bucketName = generateBucketName(input.roomName);
+      try {
+        const objects = await s3.listObjectsV2({
+          Bucket: bucketName,
+        }).promise();
+
+        if (objects.Contents && objects.Contents.length > 0) {
+          // Get the latest summary file
+          const latestObject = objects.Contents.reduce((latest, current) => {
+            return !latest || (current.LastModified && latest.LastModified && current.LastModified > latest.LastModified) 
+              ? current 
+              : latest;
+          });
+
+          if (latestObject.Key) {
+            const url = s3.getSignedUrl('getObject', {
+              Bucket: bucketName,
+              Key: latestObject.Key,
+              Expires: 604800 // URL expires in 7 days
+            });
+
+            return { url };
+          }
+        }
+        return { url: null };
+      } catch (error) {
+        console.error('Error getting room summary:', error);
+        return { url: null };
+      }
     }),
     
   sendSummaryEmails: protectedProcedure

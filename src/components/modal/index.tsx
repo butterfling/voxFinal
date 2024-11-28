@@ -19,7 +19,7 @@ const Modal: FunctionComponent<ModalProps> = ({
   selectedCode,
 }) => {
   const { data, error, isLoading } = api.summary.getRoomSummary.useQuery({
-    roomName,
+    roomName: `${roomName}/summary`,
   });
   console.log(data);
 
