@@ -4,7 +4,7 @@
 
 # Description
 
-Live Video Conferencing app which transcribes, translates and speaks out the text to all users on the call in realtime. Also provides with the meeting minutes/summary of the meeting.
+Live Video Conferencing app which transcribes, translates and speaks out the text to all users on the call in realtime. Also provides with the meeting minutes/summary of the meeting through s3 link in user's email.
 
 # Tech Stack
 
@@ -21,10 +21,10 @@ Live Video Conferencing app which transcribes, translates and speaks out the tex
 # Installation Steps
 
 1. ```bash
-   git clone https://github.com/nagarajpandith/hackverse
+   git clone https://github.com/butterfling/voxFinal.git
    ```
 
-2. cd hackverse
+2. cd voxbridge
 
 3. ```bash
    npm i
