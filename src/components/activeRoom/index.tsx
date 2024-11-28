@@ -41,6 +41,7 @@ const ActiveRoom = ({
   selectedLanguage,
 }: ActiveRoomProps) => {
   const { data, error, isLoading } = api.rooms.joinRoom.useQuery({ roomName });
+  const sendEmailsMutation = api.summary.sendSummaryEmails.useMutation();
 
   const router = useRouter();
 
@@ -248,6 +249,12 @@ const ActiveRoom = ({
         message: `Meeting summary is ready! Access it here: ${s3Url}`,
         roomName: roomName,
         isFinal: true,
+      });
+
+      // Send emails to participants
+      await sendEmailsMutation.mutateAsync({
+        roomName: roomName,
+        summaryUrl: s3Url,
       });
       
       // Call original onLeave if it exists

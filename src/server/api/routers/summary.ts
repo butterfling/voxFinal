@@ -3,12 +3,13 @@ import { z } from "zod";
 import AWS from 'aws-sdk';
 import { env } from "@/env.mjs";
 import { Prisma, Room } from "@prisma/client";
+import { pipeline } from '@xenova/transformers';
 
 // Configure AWS S3
 const s3 = new AWS.S3({
   accessKeyId: env.AWS_ACCESS_KEY_ID,
   secretAccessKey: env.AWS_SECRET_ACCESS_KEY,
-  region: env.AWS_REGION.replace(/['"]/g, ''),
+  region: env.AWS_REGION.replace(/['"`]/g, ''),
   endpoint: 'https://s3.eu-north-1.amazonaws.com',
   signatureVersion: 'v4'
 });
@@ -34,92 +35,176 @@ const uploadToS3 = async (bucketName: string, summary: string, roomName: string)
   });
 };
 
+// Local summarizer initialization
+let summarizer: any = null;
+
+async function initializeSummarizer() {
+  if (!summarizer) {
+    console.log('Initializing summarizer...');
+    summarizer = await pipeline('summarization', 'Xenova/distilbart-cnn-12-6');
+    console.log('Summarizer initialized successfully');
+  }
+  return summarizer;
+}
+
+// Function to generate summary from text
+async function generateSummaryFromText(transcription: string) {
+  const summarizer = await initializeSummarizer();
+  
+  const result = await summarizer(transcription, {
+    max_length: 250,
+    min_length: 50,
+    length_penalty: 2.0,
+    num_beams: 4,
+    early_stopping: true,
+    do_sample: false
+  });
+
+  return result;
+}
+
 export const summaryRouter = createTRPCRouter({
-  getRoomSummary: protectedProcedure
+  generateSummary: protectedProcedure
     .input(
       z.object({
         roomName: z.string(),
+        transcription: z.string(),
       })
     )
-    .query(async ({ input, ctx }) => {
-      // Get transcripts from the database
-      const transcripts = await ctx.prisma.transcript.findMany({
-        where: {
-          Room: {
-            name: input.roomName,
-          },
-        },
-        include: {
-          User: true,
-        },
-        orderBy: {
-          createdAt: "asc",
-        },
-      });
+    .mutation(async ({ input, ctx }) => {
+      console.log('[DEBUG] Pipeline initialized, generating summary');
+      console.log('Generating summary for transcript length:', input.transcription.length);
 
-      if (transcripts.length === 0) {
-        throw new Error("No transcripts found for this room");
-      }
-
-      // Format transcripts for BERT summarization
-      const conversationText = transcripts
-        .map((t) => `${t.User?.name || 'Unknown User'}: ${t.transcription}`)
-        .join("\n");
-
-      // Generate summary using BERT API endpoint
-      const response = await fetch(`${env.NEXTAUTH_URL}/api/generate-summary`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          transcripts: conversationText,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to generate summary');
-      }
-
-      const { summary } = await response.json();
+      // Generate summary using pipeline
+      const summary = await generateSummaryFromText(input.transcription);
+      console.log('[DEBUG] Summary generation completed:', summary);
+      console.log('[DEBUG] Generated summary:', summary[0]?.summary_text);
 
       // Upload to S3
       const bucketName = generateBucketName(input.roomName);
+      console.log('[DEBUG] Generated bucket name:', bucketName);
+
+      console.log('[DEBUG] Checking if bucket exists:', bucketName);
       try {
-        // Ensure bucket exists
-        try {
-          await s3.headBucket({ Bucket: bucketName }).promise();
-        } catch (error: any) {
-          if (error.code === 'NotFound' || error.code === 'NoSuchBucket') {
+        await s3.headBucket({ Bucket: bucketName }).promise();
+      } catch (error: unknown) {
+        if (error instanceof Error) {
+          console.log('[DEBUG] Bucket check error:', (error as AWS.AWSError).code);
+          if ((error as AWS.AWSError).code === 'NotFound') {
+            console.log('[DEBUG] Creating new bucket:', bucketName);
             await s3.createBucket({
               Bucket: bucketName,
               CreateBucketConfiguration: {
-                LocationConstraint: env.AWS_REGION.replace(/['"]/g, '')
+                LocationConstraint: env.AWS_REGION.replace(/['"`]/g, '')
               }
             }).promise();
+            console.log('[DEBUG] Bucket created successfully:', bucketName);
+          } else {
+            throw error;
           }
+        } else {
+          console.log('[DEBUG] Unknown error type:', error);
         }
+      }
 
-        const s3Url = await uploadToS3(bucketName, summary, input.roomName);
+      const url = await uploadToS3(bucketName, summary[0]?.summary_text ?? '', input.roomName);
+      console.log('[DEBUG] Successfully uploaded summary. URL:', url);
 
-        // Store the summary URL in the database
-        const updateData = {
-          summaryUrl: s3Url,
-          summary: summary
-        } as Prisma.RoomUpdateInput;
+      if (!url) {
+        throw new Error('Failed to generate S3 URL');
+      }
 
-        await ctx.prisma.room.update({
-          where: { name: input.roomName },
-          data: updateData,
+      // Create transcript record
+      const transcript = await ctx.prisma.transcript.create({
+        data: {
+          roomName: input.roomName,
+          transcription: input.transcription,
+          userId: ctx.session.user.id,
+        },
+      });
+
+      return {
+        success: true,
+        summary: summary[0]?.summary_text ?? '',
+        url,
+        transcriptId: transcript.id,
+      };
+    }),
+    
+  sendSummaryEmails: protectedProcedure
+    .input(
+      z.object({
+        roomName: z.string(),
+        summaryUrl: z.string(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      // Get room participants
+      console.log('[DEBUG] Fetching room participants');
+      const participants = await ctx.prisma.participant.findMany({
+        where: {
+          RoomName: input.roomName,
+        },
+        include: {
+          User: {
+            select: {
+              email: true,
+            },
+          },
+        },
+      });
+
+      console.log('[DEBUG] Found participants:', participants);
+
+      // Send email to each participant
+      const emailPromises = participants
+        .filter(p => p.User?.email)
+        .map(async (participant) => {
+          if (!participant.User?.email) return null;
+          try {
+            console.log('[DEBUG] Attempting to send email to:', participant.User.email);
+            const result = await fetch('http://localhost:3000/api/send-email', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                email: participant.User.email,
+                roomName: input.roomName,
+                summaryUrl: input.summaryUrl,
+              }),
+            });
+
+            if (!result.ok) {
+              const errorData = await result.json();
+              console.error('[DEBUG] Failed to send email:', errorData);
+              throw new Error(`Failed to send email: ${errorData.error || 'Unknown error'}`);
+            }
+
+            const data = await result.json();
+            console.log('[DEBUG] Email sent successfully:', data);
+            return { email: participant.User.email, success: true };
+          } catch (error) {
+            console.error('[DEBUG] Error sending email to', participant.User.email, error);
+            return { email: participant.User.email, success: false, error };
+          }
         });
 
-        return {
-          summary,
-          summaryUrl: s3Url,
-        };
-      } catch (error) {
-        console.error('Error uploading to S3:', error);
-        throw new Error('Failed to store summary in S3');
-      }
+      const emailResults = await Promise.allSettled(emailPromises);
+      
+      const emailSummary = emailResults.reduce((acc: { successful: string[], failed: string[] }, result) => {
+        if (result.status === 'fulfilled' && result.value) {
+          if (result.value.success) {
+            acc.successful.push(result.value.email);
+          } else {
+            acc.failed.push(result.value.email);
+          }
+        }
+        return acc;
+      }, { successful: [], failed: [] });
+
+      console.log('[DEBUG] Email notification summary:', emailSummary);
+
+      return emailSummary;
     }),
 });

@@ -29,6 +29,7 @@ const server = z.object({
   PUSHER_KEY: z.string(),
   PUSHER_SECRET: z.string(),
   PUSHER_CLUSTER: z.string(),
+  RESEND_API_KEY: z.string().min(1),
   // AWS Configuration
   AWS_ACCESS_KEY_ID: z.string().min(1),
   AWS_SECRET_ACCESS_KEY: z.string().min(1),
@@ -72,6 +73,7 @@ const processEnv = {
   NEXT_PUBLIC_PUSHER_KEY: process.env.NEXT_PUBLIC_PUSHER_KEY,
   NEXT_PUBLIC_PUSHER_CLUSTER: process.env.NEXT_PUBLIC_PUSHER_CLUSTER,
   NEXT_PUBLIC_DEEPGRAM_API_KEY: process.env.NEXT_PUBLIC_DEEPGRAM_API_KEY,
+  RESEND_API_KEY: process.env.RESEND_API_KEY,
   AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID,
   AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY,
   AWS_REGION: process.env.AWS_REGION,
